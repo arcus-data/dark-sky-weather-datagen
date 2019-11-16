@@ -1,24 +1,22 @@
 #!/usr/bin/python3
-import sys
 import json
 import time
 import requests
-import random
 from datetime import datetime, timedelta
 
 # quick var setup 
 ds_url = "https://api.darksky.net/forecast"
 ds_token = "832a29d9f7de4f05e8de840e563be398"
-num_days = 30 
+num_days = 30
 lat = 47.620403
 lng = -122.349322 
 
 # files and paths
 file = 'dark_sky_backfill_' + str(lat) + '_' + str(lng) + '_' + str(num_days) + 'days.json'
-f= open(file, "w+")
+f = open(file, "w+")
 
 
-def main() :
+def main():
     # go back in time number of days
     for x in range(1, num_days + 1):
         # calculate date and convert to epoch
@@ -43,31 +41,43 @@ def main() :
 
         except Exception as e:
             print("There was an error backfilling the data. " + str(e))
+            break
 
 
-
-def fetchDarkSkyAPI(epoch) :
+def fetchDarkSkyAPI(epoch):
     # this bit is a feeble attempt to fend off rate limiting!
     max_attempts = 10
     attempts = 0
 
     while attempts < max_attempts:
         # Make a request to Dark Sky API
-        response = requests.get(ds_url + '/'+ ds_token + '/' + str(lat) + ',' + str(lng) + ',' + str(epoch) + '?exclude=currently,daily,flags')
-        
-        # If not rate limited, break out of while loop and continue code execution
-        if response.status_code != 429:
-            break
+        params = str(lat) + ',' + str(lng) + ',' + str(epoch) + '?exclude=currently,daily,flags'
+        response = requests.get(ds_url + '/' + ds_token + '/' + params)
 
-        # log the error for funsies
-        print("HTTP 429 - Too Many Requests. Backing off and retying... Attempt #" + str(attempts))
+        if response.status_code < 400:
+            # All is well
 
-        # If rate limited, wait and try again, slowing a little more each time
-        time.sleep((2 ** attempts) + random.random())
-        attempts = attempts + 1
+            json_response = response.json()
+            return json_response
 
-    json_response = response.json()
-    return json_response
+        elif response.status_code == 429:
+            # We're being rate-limited
+
+            print("HTTP 429 - Too Many Requests. Backing off and retying... Attempt #" + str(attempts))
+
+            # wait and try again, slowing more each time
+            time.sleep((2 ** attempts))
+            attempts = attempts + 1
+
+        else:
+            # Something else went wrong
+
+            print("HTTP {} - Aborting".format(response.status_code))
+            raise ConnectionError("HTTP {} - Aborting".format(response.status_code))
+
+    raise ConnectionRefusedError("Maximum attempts reached. Aborting.")
+
 
 # grip it and rip it
-main()
+if __name__ == "__main__":
+    main()
